@@ -1,7 +1,7 @@
 package main
 
 import (
-  "github.com/navaz-alani/fractal-engine"
+	"github.com/navaz-alani/fractal-engine"
 
 	"flag"
 	"fmt"
@@ -31,8 +31,8 @@ var (
 	contrast       = flag.Uint("bw-contrast", 15, "bw-palette constrast")
 	juliaExp       = flag.Uint("julia-exp", 2, "exponent of the function generating the set f(z)=z**exp+c")
 	juliaEscapeRad = flag.Float64("julia-escape-rad", 2, "iterate absolute value escape radius")
-  initIterateX   = flag.Float64("init-iteratex", 0, "real part of the initial iterate")
-  initIterateY   = flag.Float64("init-iteratey", 0, "imag part of the initial iterate")
+	initIterateX   = flag.Float64("init-iteratex", 0, "real part of the initial iterate")
+	initIterateY   = flag.Float64("init-iteratey", 0, "imag part of the initial iterate")
 	progress       = flag.Bool("progress", false, "display render progress (frame count)")
 )
 
@@ -93,10 +93,10 @@ func main() {
 
 	// prepare the color fn
 	juliaSetFn := &fractal.JuliaSetFn{
-		Exp:       int(*juliaExp),
-		MaxIters:  int(*iterations),
-		EscapeRad: *juliaEscapeRad,
-    InitIterate: complex(*initIterateX, *initIterateY),
+		Exp:         int(*juliaExp),
+		MaxIters:    int(*iterations),
+		EscapeRad:   *juliaEscapeRad,
+		InitIterate: complex(*initIterateX, *initIterateY),
 	}
 	colorFn := func(c complex128) color.Color {
 		return pal.PixelColor(juliaSetFn.EscapeIter(c))
