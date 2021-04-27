@@ -7,6 +7,7 @@ import (
 	"image/gif"
 	"os"
 	"runtime"
+	"sync"
 )
 
 // ColorFunctionGenerator is a function which takes the iteration that the
@@ -55,57 +56,69 @@ type GIFRenderer struct {
 }
 
 type frameRenderJob struct {
-	frameID   uint
-	img       *image.Paletted
-	renderer  *ImgRenderer
-	imgStream chan<- *renderedFrame
-  sliceWidth uint
-}
-
-type renderedFrame struct {
-	frameID uint
-	img     *image.Paletted
+	frameID    uint
+	img        *image.Paletted
+	renderer   *ImgRenderer
+	jobStream  chan<- *frameRenderJob
+	sliceWidth uint
 }
 
 func (gr *GIFRenderer) renderJob(job *frameRenderJob) {
-  job.renderer.Img = job.img
-  job.renderer.RenderImg(gr.ColorFnGen(job.frameID), job.sliceWidth)
-  job.imgStream <- &renderedFrame{
-    frameID: job.frameID,
-    img: job.img,
-  }
+	job.renderer.Img = job.img
+	job.renderer.RenderImg(gr.ColorFnGen(job.frameID), job.sliceWidth)
+	job.jobStream <- job
 }
 
 func (gr *GIFRenderer) RenderParallel(maxJobs uint) *gif.GIF {
 	anim := &gif.GIF{}
 
+	// set up main render loop state variables
 	// map of frames which have been rendered, but not added to anim
-  renderJobs := make(map[uint]*image.Paletted)
-	// channel over which a frameRenderJob reports the renderedFrame
-	imgStream := make(chan *renderedFrame)
+	renderJobs := make(map[uint]*image.Paletted)
+	// channel over which a frameRenderJob reports its completed job
+	jobStream := make(chan *frameRenderJob)
 	var (
 		runningJobs     uint
 		nextFrameID     uint // id of next job to dispatch
 		nextFrameNeeded uint // id of next frame to add to anim
 	)
-  // initial plot dimension
+	// initial plot dimension - will need to be updated each frame
 	plotWidth, plotHeight := gr.PlotWidth, gr.PlotHeight
-  // base renderer used for all renders
-  baseImgRenderer := ImgRenderer{
-    ImgWidth:   gr.ImgWidth,
-    ImgHeight:  gr.ImgHeight,
-    CX:         gr.CX,
-    CY:         gr.CY,
-  }
-  // slice width for each render
+	// slice width for each render - const
 	sliceWidth := gr.ImgWidth / uint(runtime.NumCPU())
-  // render loop - dispatch jobs and compile anim
+
+	// pools - to prevent a lot of heap-reallocations, we pool frequently
+	// allocated objects
+
+	// image renderers
+	var imgRendererPool sync.Pool
+	imgRendererPool.New = func() interface{} {
+		return &ImgRenderer{
+			ImgWidth:  gr.ImgWidth,
+			ImgHeight: gr.ImgHeight,
+			CX:        gr.CX,
+			CY:        gr.CY,
+		}
+	}
+	// pool of render jobs
+	var renderJobPool sync.Pool
+	renderJobPool.New = func() interface{} {
+		return &frameRenderJob{
+			jobStream:  jobStream,
+			sliceWidth: sliceWidth,
+		}
+	}
+
+	// render loop - dispatch jobs and compile anim
 	for {
 		select {
-		case render := <-imgStream:
+		case render := <-jobStream:
 			{
 				runningJobs--
 				renderJobs[render.frameID] = render.img
+				// return the allocated objects for reuse
+				imgRendererPool.Put(render.renderer)
+				renderJobPool.Put(render)
 			}
 		default:
 			{
@@ -115,38 +128,41 @@ func (gr *GIFRenderer) RenderParallel(maxJobs uint) *gif.GIF {
 						plotWidth *= gr.ZoomFactor
 						plotHeight *= gr.ZoomFactor
 					}
-          // copy base renderer and set adjusted plot dimensions for zoom
-          renderer := baseImgRenderer
-          renderer.PlotWidth = plotWidth
-          renderer.PlotHeight = plotHeight
-          // dispatch new routine to work on this render
-					go gr.renderJob(&frameRenderJob{
-						frameID:   nextFrameID,
-						img:       image.NewPaletted(
-              image.Rect(0, 0, int(gr.ImgWidth), int(gr.ImgHeight)),
-              gr.Palette,
-            ),
-						imgStream: imgStream,
-						renderer: &renderer,
-            sliceWidth: sliceWidth,
-					})
+					// set up new renderer
+					renderer := imgRendererPool.Get().(*ImgRenderer)
+					renderer.PlotWidth = plotWidth
+					renderer.PlotHeight = plotHeight
+					// set up new job
+					newJob := renderJobPool.Get().(*frameRenderJob)
+					newJob.frameID = nextFrameID
+					newJob.renderer = renderer
+					newJob.img = image.NewPaletted(
+						image.Rect(0, 0, int(gr.ImgWidth), int(gr.ImgHeight)),
+						gr.Palette,
+					)
+					// dispatch new routine to work on this render
+					go gr.renderJob(newJob)
+					// update render state counters
 					nextFrameID++
 					runningJobs++
 				}
+
 				// check if an image can be added to the anim
 				if img := renderJobs[nextFrameNeeded]; img != nil {
 					anim.Image = append(anim.Image, img)
 					anim.Delay = append(anim.Delay, gr.FrameDelayFn(uint(nextFrameNeeded)))
-          delete(renderJobs, nextFrameNeeded)
+					delete(renderJobs, nextFrameNeeded)
 					nextFrameNeeded++
+					// log progress if required
 					if gr.Progress {
 						fmt.Fprintf(os.Stdout, "Rendered %d of %d frames\n", nextFrameNeeded, gr.NFrames)
 					}
 				}
-        // check if all images have been added to the animation - done rendering
-        if nextFrameNeeded == gr.NFrames {
-          return anim
-        }
+
+				// check if all images have been added to the animation - done rendering
+				if nextFrameNeeded == gr.NFrames {
+					return anim
+				}
 			}
 		}
 	}
