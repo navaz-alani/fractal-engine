@@ -122,6 +122,11 @@ func (gr *GIFRenderer) RenderParallel(maxJobs uint) *gif.GIF {
 			}
 		default:
 			{
+				if nextFrameID%20 == 0 {
+					// run garbage collection every 20 iterations
+					runtime.GC()
+				}
+
 				// check if a new job can be dispatched
 				if runningJobs < maxJobs && nextFrameID < gr.NFrames {
 					if nextFrameID != 0 {

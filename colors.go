@@ -2,12 +2,11 @@ package fractal
 
 import (
 	"image/color"
-	//	"math"
 )
 
 // ColorPalette translates the number of iterations to a display color.
 type ColorPalette interface {
-	PixelColor(n int) color.Color
+	PixelColorIdx(n int) uint8
 	Precompute()
 	Palette() []color.Color
 }
@@ -27,11 +26,8 @@ func (p *BWPalette) Precompute() {
 	}
 }
 
-func (p *BWPalette) PixelColor(iters int) color.Color {
-	if iters < p.MaxIters {
-		return p.ColorPalette[iters%0xff]
-	}
-	return color.Black
+func (p *BWPalette) PixelColorIdx(iters int) uint8 {
+	return uint8(iters % 0xff)
 }
 
 func (p *BWPalette) Palette() []color.Color {
@@ -66,13 +62,32 @@ func (p *UltraFractalPalette) Precompute() {
 	}
 }
 
-func (p *UltraFractalPalette) PixelColor(iters int) color.Color {
-	if iters < p.MaxIters {
-		return p.ColorPalette[iters%16]
-	}
-	return color.RGBA{0, 0, 0, 0xff}
+func (p *UltraFractalPalette) PixelColorIdx(iters int) uint8 {
+	return uint8(iters % 16)
 }
 
 func (p *UltraFractalPalette) Palette() []color.Color {
+	return p.ColorPalette
+}
+
+// GreenBlack is ColorPalette which uses 255 shades of green, giving a gradient
+// from green to black.
+type GreenBlackPalette struct {
+	MaxIters     int
+	ColorPalette []color.Color
+}
+
+func (p *GreenBlackPalette) Precompute() {
+	p.ColorPalette = make([]color.Color, 0x10)
+	for i := uint8(0); i < 0x10; i++ {
+		p.ColorPalette[i] = color.RGBA{0, i * 0x10, 0, 0xff}
+	}
+}
+
+func (p *GreenBlackPalette) PixelColorIdx(iters int) uint8 {
+	return uint8(iters % 0x10)
+}
+
+func (p *GreenBlackPalette) Palette() []color.Color {
 	return p.ColorPalette
 }

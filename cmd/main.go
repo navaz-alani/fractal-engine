@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"image/gif"
 	"image/png"
 	"os"
@@ -27,7 +26,7 @@ var (
 	frameDelay     = flag.Uint("frame-delay", 8, "delay between animation frames (100s of ms)")
 	iterations     = flag.Uint("iterations", 1000, "number of iterations")
 	ofName         = flag.String("of-name", "render.png", "output file name")
-	colorPatelle   = flag.String("palette", "uf", "color palette ('bw', 'bw-inv', 'uf')")
+	colorPatelle   = flag.String("palette", "uf", "color palette ('bw', 'bw-inv', 'uf', 'gb')")
 	contrast       = flag.Uint("bw-contrast", 15, "bw-palette constrast")
 	juliaExp       = flag.Uint("julia-exp", 2, "exponent of the function generating the set f(z)=z**exp+c")
 	juliaEscapeRad = flag.Float64("julia-escape-rad", 2, "iterate absolute value escape radius")
@@ -67,8 +66,11 @@ func main() {
 
 	if *mode != "img" && *mode != "gif" {
 		exitOnErr("invalid mode - expected 'img' or 'gif'", nil, 1)
-	} else if *colorPatelle != "bw" && *colorPatelle != "bw-inv" && *colorPatelle != "uf" {
-		exitOnErr("invalid palette - expected 'bw', 'bw-inv' or 'uf'", nil, 1)
+	} else if *colorPatelle != "bw" &&
+		*colorPatelle != "bw-inv" &&
+		*colorPatelle != "uf" &&
+		*colorPatelle != "gb" {
+		exitOnErr("invalid palette - expected 'bw', 'bw-inv', 'uf' or 'gb'", nil, 1)
 	}
 
 	// setup the color palette
@@ -83,11 +85,16 @@ func main() {
 			bwPalette.Inverse = true
 		}
 		pal = bwPalette
-	} else {
+	} else if *colorPatelle == "uf" {
 		ufPalette := &fractal.UltraFractalPalette{
 			MaxIters: int(*iterations),
 		}
 		pal = ufPalette
+	} else {
+		gbPalette := &fractal.GreenBlackPalette{
+			MaxIters: int(*iterations),
+		}
+		pal = gbPalette
 	}
 
 	pal.Precompute()
@@ -99,13 +106,14 @@ func main() {
 		EscapeRad:   *juliaEscapeRad,
 		InitIterate: complex(*initIterateX, *initIterateY),
 	}
-	colorFn := func(c complex128) color.Color {
-		return pal.PixelColor(juliaSetFn.EscapeIter(c))
+	colorFn := func(c complex128) uint8 {
+		return pal.PixelColorIdx(juliaSetFn.EscapeIter(c))
 	}
 
 	if *mode == "img" {
-		img := image.NewRGBA(
+		img := image.NewPaletted(
 			image.Rect(0, 0, int(*imgWidth), int(*imgHeight)),
+			pal.Palette(),
 		)
 		renderer := fractal.ImgRenderer{
 			Img:        img,

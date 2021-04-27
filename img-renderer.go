@@ -1,16 +1,16 @@
 package fractal
 
 import (
-	"image/color"
 	"sync"
 )
 
-// ColorFunction returns a color to plot for the pixel corresponding to the
-// given complex point.
-type ColorFunction func(complex128) color.Color
+// ColorFunction returns the index of the color to plot for the pixel
+// corresponding to the given complex point.
+type ColorFunction func(complex128) uint8
 
 type Img interface {
-	Set(x, y int, c color.Color)
+	//Set(x, y int, c color.Color)
+	SetColorIndex(x, y int, idx uint8)
 }
 
 // ImgRenderer renders images of a 2-dimensional complex plot, using a
@@ -47,7 +47,7 @@ func (r *ImgRenderer) RenderSlice(
 		y := r.CY + (float64(py)/float64(r.ImgHeight)-0.5)*r.PlotHeight
 		for px := sliceLb; px < sliceUb; px++ {
 			x := r.CX + (float64(px)/float64(r.ImgWidth)-0.5)*r.PlotWidth
-			r.Img.Set(int(px), int(py), colorFn(complex(x, y)))
+			r.Img.SetColorIndex(int(px), int(py), colorFn(complex(x, y)))
 		}
 	}
 }
