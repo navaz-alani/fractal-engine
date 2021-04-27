@@ -1,0 +1,8 @@
+# ignore rendered images/gifs - they can be quite large
+renders
+# built executable
+fractal-engine
+# go pprof profiles
+*.prof
+# macos stuf
+.DS_Store
