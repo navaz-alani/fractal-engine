@@ -54,6 +54,104 @@ type GIFRenderer struct {
 	Progress bool
 }
 
+type frameRenderJob struct {
+	frameID   uint
+	img       *image.Paletted
+	renderer  *ImgRenderer
+	imgStream chan<- *renderedFrame
+  sliceWidth uint
+}
+
+type renderedFrame struct {
+	frameID uint
+	img     *image.Paletted
+}
+
+func (gr *GIFRenderer) renderJob(job *frameRenderJob) {
+  job.renderer.Img = job.img
+  job.renderer.RenderImg(gr.ColorFnGen(job.frameID), job.sliceWidth)
+  job.imgStream <- &renderedFrame{
+    frameID: job.frameID,
+    img: job.img,
+  }
+}
+
+func (gr *GIFRenderer) RenderParallel(maxJobs uint) *gif.GIF {
+	anim := &gif.GIF{}
+
+	// map of frames which have been rendered, but not added to anim
+  renderJobs := make(map[uint]*image.Paletted)
+	// channel over which a frameRenderJob reports the renderedFrame
+	imgStream := make(chan *renderedFrame)
+	var (
+		runningJobs     uint
+		nextFrameID     uint // id of next job to dispatch
+		nextFrameNeeded uint // id of next frame to add to anim
+	)
+  // initial plot dimension
+	plotWidth, plotHeight := gr.PlotWidth, gr.PlotHeight
+  // base renderer used for all renders
+  baseImgRenderer := ImgRenderer{
+    ImgWidth:   gr.ImgWidth,
+    ImgHeight:  gr.ImgHeight,
+    CX:         gr.CX,
+    CY:         gr.CY,
+  }
+  // slice width for each render
+	sliceWidth := gr.ImgWidth / uint(runtime.NumCPU())
+  // render loop - dispatch jobs and compile anim
+	for {
+		select {
+		case render := <-imgStream:
+			{
+				runningJobs--
+				renderJobs[render.frameID] = render.img
+			}
+		default:
+			{
+				// check if a new job can be dispatched
+				if runningJobs < maxJobs && nextFrameID < gr.NFrames {
+					if nextFrameID != 0 {
+						plotWidth *= gr.ZoomFactor
+						plotHeight *= gr.ZoomFactor
+					}
+          // copy base renderer and set adjusted plot dimensions for zoom
+          renderer := baseImgRenderer
+          renderer.PlotWidth = plotWidth
+          renderer.PlotHeight = plotHeight
+          // dispatch new routine to work on this render
+					go gr.renderJob(&frameRenderJob{
+						frameID:   nextFrameID,
+						img:       image.NewPaletted(
+              image.Rect(0, 0, int(gr.ImgWidth), int(gr.ImgHeight)),
+              gr.Palette,
+            ),
+						imgStream: imgStream,
+						renderer: &renderer,
+            sliceWidth: sliceWidth,
+					})
+					nextFrameID++
+					runningJobs++
+				}
+				// check if an image can be added to the anim
+				if img := renderJobs[nextFrameNeeded]; img != nil {
+					anim.Image = append(anim.Image, img)
+					anim.Delay = append(anim.Delay, gr.FrameDelayFn(uint(nextFrameNeeded)))
+          delete(renderJobs, nextFrameNeeded)
+					nextFrameNeeded++
+					if gr.Progress {
+						fmt.Fprintf(os.Stdout, "Rendered %d of %d frames\n", nextFrameNeeded, gr.NFrames)
+					}
+				}
+        // check if all images have been added to the animation - done rendering
+        if nextFrameNeeded == gr.NFrames {
+          return anim
+        }
+			}
+		}
+	}
+}
+
 func (gr *GIFRenderer) Render() *gif.GIF {
 	anim := &gif.GIF{}
 	// set up the base image renderer
@@ -66,7 +164,7 @@ func (gr *GIFRenderer) Render() *gif.GIF {
 		CY:         gr.CY,
 	}
 	// determine the renderer sliceWidth (using at most runtime.NumCPU() slices)
-	sliceWidth := gr.ImgWidth / (2 * uint(runtime.NumCPU()))
+	sliceWidth := gr.ImgWidth / uint(runtime.NumCPU())
 	// render the frames
 	for f := uint(0); f < gr.NFrames; f++ {
 		// modify image renderer's plot dimensions after the first frame

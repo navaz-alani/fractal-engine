@@ -33,6 +33,7 @@ var (
 	juliaEscapeRad = flag.Float64("julia-escape-rad", 2, "iterate absolute value escape radius")
 	initIterateX   = flag.Float64("init-iteratex", 0, "real part of the initial iterate")
 	initIterateY   = flag.Float64("init-iteratey", 0, "imag part of the initial iterate")
+  parallel       = flag.Bool("parallel", true, "whether to render animations in parallel")
 	progress       = flag.Bool("progress", false, "display render progress (frame count)")
 )
 
@@ -138,7 +139,12 @@ func main() {
 			Palette:  pal.Palette(),
 			Progress: *progress,
 		}
-		anim := renderer.Render()
+    var anim *gif.GIF
+    if *parallel {
+      anim = renderer.RenderParallel(uint(runtime.NumCPU()))
+    } else {
+      anim = renderer.Render()
+    }
 		if err := gif.EncodeAll(file, anim); err != nil {
 			exitOnErr("failed to encode render to gif", err, 1)
 		}
