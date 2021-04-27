@@ -2,7 +2,8 @@
 renders
 # built executable
 fractal-engine
-# go pprof profiles
+# go pprof profiles & visualizations
 *.prof
+profile*.gif
 # macos stuf
 .DS_Store
