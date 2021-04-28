@@ -6,7 +6,7 @@ Here are some examples:
 
 <div style="display:flex;justify-content:center;align-items:center;">
   <img width="49%" src="imgs/z^4+c.png"/>
-  <img width="49%" src="imgs/zoom.gif"/>
+  <img width="49%" src="imgs/julia.gif"/>
 </div>
 
 There is a simple command line program in the `cmd` directory which can be built
