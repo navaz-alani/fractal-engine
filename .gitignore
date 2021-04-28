@@ -1,9 +1,16 @@
 # ignore rendered images/gifs - they can be quite large
-renders
+renders/*
+
 # built executable
 fractal-engine
+julia-animation
+
+# do not ignore anything in the cmd directory
+!cmd/*
+
 # go pprof profiles & visualizations
 *.prof
 profile*.gif
+
 # macos stuf
 .DS_Store
