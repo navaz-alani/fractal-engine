@@ -8,7 +8,7 @@ ANIM_DIR=cmd/julia-anim
 
 SRCS=$(wildcard *.go)
 
-${JULIA_ANIM}: ${SRCS} $(wildcard ${JULIA_ANIM}/*.go)
+${JULIA_ANIM}: ${SRCS} $(wildcard ${ANIM_DIR}/*.go)
 	${GC} build -o ${JULIA_ANIM} ./${ANIM_DIR}
 
 ${ENG}: ${SRCS} $(wildcard ${ENG_DIR}/*.go)
